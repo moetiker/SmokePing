@@ -1,3 +1,4 @@
+ - eliminate page redirect on every click; inject width via link interception and replaceState; width-key SVG cache filenames for correct re-rendering on resize @oetiker
  - replace string eval with block eval and dispatch tables for safer dynamic module loading @oetiker
  - modernize Perl: replace use vars with our, two-arg open with three-arg, bareword filehandles with lexical variables @oetiker
  - avoid full page reload on browser resize; update graph width silently for next refresh cycle @oetiker

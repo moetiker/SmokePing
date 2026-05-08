@@ -192,8 +192,8 @@
     function recordWidth() {
         var w = clamp(getContentWidth());
         if (w <= 0) return;
-        if (history.replaceState) {
-            history.replaceState(null, '', buildWidthUrl(w));
+        if (w !== currentUrlWidth()) {
+            location.replace(buildWidthUrl(w));
         }
     }
 
@@ -206,18 +206,39 @@
     }
 
     var w = clamp(getContentWidth());
-    if (w > 0 && currentUrlWidth() === 0) {
-        location.replace(buildWidthUrl(w));
-    } else {
-        revealGraphs();
+    if (w > 0) {
+        history.replaceState(null, '', buildWidthUrl(w));
     }
+    revealGraphs();
 
     window.addEventListener('resize', function () {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(recordWidth, 500);
     });
 
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('a[href]');
+        if (!link) return;
+        var href = link.getAttribute('href');
+        if (!href || href.charAt(0) === '#' || href.indexOf('mailto:') === 0) return;
+        if (link.origin !== location.origin) return;
+        var lw = clamp(getContentWidth());
+        if (lw <= 0) return;
+        var hashIdx = href.indexOf('#');
+        var base = hashIdx === -1 ? href : href.slice(0, hashIdx);
+        var frag = hashIdx === -1 ? '' : href.slice(hashIdx);
+        if (/[?&]width=\d+/.test(base)) {
+            base = base.replace(/([?&]width=)\d+/, '$1' + lw);
+        } else {
+            base += (base.indexOf('?') === -1 ? '?' : '&') + 'width=' + lw;
+        }
+        e.preventDefault();
+        location.href = base + frag;
+    });
+
     // ── In-place graph refresh ────────────────────────────
+
+    var refresh;
 
     function refreshGraphs() {
         var imgs = document.querySelectorAll('.panel-body img, .overview img, .details img');
@@ -250,40 +271,45 @@
         }, window.options.step * 1000);
     }
 
-    // ── Init on load ──────────────────────────────────────
+    // ── Init (defer guarantees DOM is ready) ──────────────
 
-    window.addEventListener('load', function () {
-        var refresh = scheduleRefresh();
+    var bodyEl = document.getElementById('body');
+    var sidebar = document.getElementById('sidebar');
+    var menuBtn = document.getElementById('menu-button');
+    var refreshBtn = document.getElementById('refresh-button');
 
-        document.getElementById('menu-button').addEventListener('click', function (e) {
-            var body = document.getElementById('body');
-            if (getComputedStyle(document.getElementById('sidebar')).left == '0px') {
-                body.classList.add('sidebar-hidden');
-                body.classList.remove('sidebar-visible');
-            } else {
-                body.classList.remove('sidebar-hidden');
-                body.classList.add('sidebar-visible');
-            }
-            e.preventDefault();
-        });
+    if (!localStorage.getItem("noRefresh")) {
+        refresh = scheduleRefresh();
+        refreshBtn.style.textDecoration = "line-through";
+    }
 
-        document.getElementById('refresh-button').addEventListener('click', function (e) {
-            if (localStorage.getItem("noRefresh")) {
-                localStorage.removeItem("noRefresh");
-                refresh = scheduleRefresh();
-                document.getElementById('refresh-button').style.textDecoration = "line-through";
-            } else {
-                clearTimeout(refresh);
-                localStorage.setItem("noRefresh", true);
-                document.getElementById('refresh-button').style.textDecoration = "none";
-            }
-            e.preventDefault();
-        });
-
-        var zoomImg = document.getElementById('zoom');
-        if (zoomImg != null) {
-            initCropper(zoomImg);
+    menuBtn.addEventListener('click', function (e) {
+        if (getComputedStyle(sidebar).left == '0px') {
+            bodyEl.classList.add('sidebar-hidden');
+            bodyEl.classList.remove('sidebar-visible');
+        } else {
+            bodyEl.classList.remove('sidebar-hidden');
+            bodyEl.classList.add('sidebar-visible');
         }
+        e.preventDefault();
     });
+
+    refreshBtn.addEventListener('click', function (e) {
+        if (localStorage.getItem("noRefresh")) {
+            localStorage.removeItem("noRefresh");
+            refresh = scheduleRefresh();
+            refreshBtn.style.textDecoration = "line-through";
+        } else {
+            clearTimeout(refresh);
+            localStorage.setItem("noRefresh", true);
+            refreshBtn.style.textDecoration = "none";
+        }
+        e.preventDefault();
+    });
+
+    var zoomImg = document.getElementById('zoom');
+    if (zoomImg != null) {
+        initCropper(zoomImg);
+    }
 
 })();

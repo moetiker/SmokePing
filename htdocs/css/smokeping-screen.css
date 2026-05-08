@@ -387,6 +387,7 @@ a#menu-button svg {
 	width: 100% !important;
 	height: auto !important;
 	display: block;
+	transition: opacity 0.3s ease;
 }
 
 /* ── Overview & Details containers ───────────────────── */
@@ -473,12 +474,6 @@ a#menu-button svg {
 	.sidebar-visible .navbar {
 		left: var(--sidebar-width) !important;
 	}
-}
-
-/* ── Misc ─────────────────────────────────────────────── */
-
-.imgCrop_clickArea {
-	cursor: crosshair;
 }
 
 /* ── Dark mode ───────────────────────────────────────── */

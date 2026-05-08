@@ -1041,9 +1041,14 @@ sub get_overview ($$$$){
         my $ov_default_w = $cfg->{Presentation}{overview}{width};
         my $ov_actual_w = get_param_width($q, $ov_default_w);
         $ov_range = int($ov_range * $ov_actual_w / $ov_default_w) if $ov_actual_w > $ov_default_w;
+        my $ov_wsuffix = $ov_actual_w != $ov_default_w ? "_w${ov_actual_w}" : '';
+        # clean up stale width-variant overview SVGs
+        for (glob($cfg->{General}{imgcache}.$dir."/${prop}_mini_w*.svg")) {
+            unlink $_ if $_ ne $cfg->{General}{imgcache}.$dir."/${prop}_mini${ov_wsuffix}.svg";
+        }
 
         my ($graphret,$xs,$ys) = RRDs::graph
-          ($cfg->{General}{imgcache}.$dir."/${prop}_mini.svg",
+          ($cfg->{General}{imgcache}.$dir."/${prop}_mini${ov_wsuffix}.svg",
     #       '--lazy',
            '--start','-'.$ov_range,
            '--title',$cfg->{Presentation}{htmltitle} ne 'yes' ? $phys_tree->{title} : '',
@@ -1069,7 +1074,7 @@ sub get_overview ($$$$){
         } else {
          $page.="<A HREF=\"".lnk($q, (join ".", @$open, ${prop}))."\">".
             "<IMG ALT=\"\" class=\"img-responsive\" ".
-            "SRC=\"".$cfg->{General}{imgurl}.$dir."/${prop}_mini.svg?width=${ov_actual_w}\"></A>";
+            "SRC=\"".$cfg->{General}{imgurl}.$dir."/${prop}_mini${ov_wsuffix}.svg?width=${ov_actual_w}\"></A>";
         }
         $page .="</div></div>\n";
     }
@@ -1403,10 +1408,11 @@ sub get_detail ($$$$;$){
         # the configured default so that wider browsers show a longer
         # time span instead of zooming into the same span.
         my $display_start = $start;
+        my $detail_default_w = $cfg->{Presentation}{detail}{width};
+        my $detail_actual_w = get_param_width($q, $detail_default_w);
+        my $wsuffix = $detail_actual_w != $detail_default_w ? "_w${detail_actual_w}" : '';
         if ($mode eq 's') {
-            my $default_w = $cfg->{Presentation}{detail}{width};
-            my $actual_w = get_param_width($q, $default_w);
-            $display_start = int($start * $actual_w / $default_w) if $actual_w > $default_w;
+            $display_start = int($start * $detail_actual_w / $detail_default_w) if $detail_actual_w > $detail_default_w;
         }
 
         my $startstr = $display_start =~ /^\d+$/ ? POSIX::strftime("%Y-%m-%d %H:%M",localtime($mode eq 'n' ? $display_start : time-$display_start)) : $display_start;
@@ -1502,12 +1508,16 @@ sub get_detail ($$$$;$){
             my @lazy =();
             @lazy = ('--lazy') if $mode eq 's' and $lastheight{$s} and $lastheight{$s}{$start} and $lastheight{$s}{$start} == $max->{$s}{$start};
             my $timer_start = time();
+            # clean up stale width-variant detail SVGs
+            for (glob("${imgbase}${s}_${end}_${start}_w*.svg")) {
+                unlink $_ if $_ ne "${imgbase}${s}_${end}_${start}${wsuffix}.svg";
+            }
             my $title = "";
             if ($cfg->{Presentation}{htmltitle} ne 'yes') {
                 $title = "$desc from " . ($s ? $cfg->{Slaves}{$slave}{display_name}: $cfg->{General}{display_name} || hostname) . " to $phys_tree->{title}";
             }
             my @task =
-               ("${imgbase}${s}_${end}_${start}.svg",
+               ("${imgbase}${s}_${end}_${start}${wsuffix}.svg",
                @lazy,
                '--start',$realstart,
                ($end ne 'last' ? ('--end',$end) : ()),
@@ -1553,7 +1563,7 @@ sub get_detail ($$$$;$){
         }
 
         if ($mode eq 'a'){ # ajax mode
-             open my $img, "${imgbase}_${end}_${start}.svg" or die "${imgbase}_${end}_${start}.svg: $!";
+             open my $img, "${imgbase}_${end}_${start}${wsuffix}.svg" or die "${imgbase}_${end}_${start}${wsuffix}.svg: $!";
              binmode $img;
              print "Content-Type: image/svg+xml\n";
              my $data;
@@ -1561,7 +1571,7 @@ sub get_detail ($$$$;$){
              close $img;
              print "Content-Length: ".length($data)."\n\n";
              print $data;
-             unlink "${imgbase}_${end}_${start}.svg";
+             unlink "${imgbase}_${end}_${start}${wsuffix}.svg";
              return undef;
         }
         elsif ($mode eq 'n'){ # navigator mode
@@ -1606,17 +1616,15 @@ sub get_detail ($$$$;$){
                     $page .= "<div class=\"".panel_heading_class()."\"><h2>$title</h2></div>";
                 }
                 $page .= "<div class=\"panel-body\">";
-                my $svg_w = get_param_width($q, $cfg->{Presentation}{detail}{width});
                 $page .= ( qq{<a href="}.cgiurl($q,$cfg)."?".hierarchy($q).qq{displaymode=n&start=$startstr&end=now&}."target=".$t.$s.'">'
-                      . qq{<IMG ALT="" SRC="${imghref}${s}_${end}_${start}.svg?width=${svg_w}" class="img-responsive">}."</a>" ); #"
+                      . qq{<IMG ALT="" SRC="${imghref}${s}_${end}_${start}${wsuffix}.svg?width=${detail_actual_w}" class="img-responsive">}."</a>" ); #"
                 $page .= "</div></div>\n";
             }
         } else { # chart mode
             $page .= qq{<div class="panel-body">};
             my $href= (split /~/, (join ".", @$open))[0]; #/ # the link is 'slave free'
-            my $svg_w = get_param_width($q, $cfg->{Presentation}{detail}{width});
             $page .= (  qq{<a href="}.lnk($q, $href).qq{">}
-                      . qq{<IMG ALT="" SRC="${imghref}_${end}_${start}.svg?width=${svg_w}" class="img-responsive">}."</a>" ); #"
+                      . qq{<IMG ALT="" SRC="${imghref}_${end}_${start}${wsuffix}.svg?width=${detail_actual_w}" class="img-responsive">}."</a>" ); #"
             $page .= "</div>";
 
         }
