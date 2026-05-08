@@ -1,143 +1,166 @@
-/*++ from bonsai.js ++ urlObj  +++++++++++++++++++++++++++++++++++++++++*/
-function urlObj(url) {
-   var urlBaseAndParameters;
-
-   urlBaseAndParameters = url.split("?"); 
-   this.urlBase = urlBaseAndParameters[0];
-   this.urlParameters = urlBaseAndParameters[1].split(/[;&]/);
-
-   this.getUrlBase = urlObjGetUrlBase;
-}
-
-/*++ from bonsai.js ++ urlObjGetUrlBase  +++++++++++++++++++++++++++++++*/
-
-function urlObjGetUrlBase() {
-   return this.urlBase;
-}
-
-function parseRelativeTime(currTime) {
-    var unit = '';
-    var offset = 0;
-    var sign = -1;
-    var table = {
-        s : 1,        // 1
-        m : 60,       // s * 60
-        h : 3600,     // m * 60
-        d : 86400,    // h * 24
-        w : 604800,    // d * 7
-        mo : 2592000, // d * 30
-        y : 31536000, // d * 365
-    };
-    var regexStr = currTime.match(/[+\-]|[^a-z]+|[a-zA-Z]+/gi);
-    if (regexStr[0] == '+')
-        sign = 1;
-    for (i=1; i< regexStr.length; i=i+2) {
-        unit = regexStr[i+1].slice(0,1);
-        if (regexStr[i+1].slice(0,2) == 'mo' || (regexStr[i+1] == 'm' && Math.abs(regexStr[i]) <= 5))
-            unit = 'mo';
-        offset += regexStr[i]*table[unit];
-
-    }
-    offset = offset*sign;
-    return Math.floor(Date.now()/1000) + offset;
-}
-
-// example with minimum dimensions
-var myCropper;
-
-var StartEpoch = 0;
-var EndEpoch = 0;
-
-
-
-function changeRRDImage(coords,dimensions){
-
-    // disable reloading the RRD image while zoomed in
-    try {
-        window.stop();
-    } catch (exception) {
-        // fallback for IE
-        document.execCommand('Stop');
-    }
-    
-    var SelectLeft = Math.min(coords.x1,coords.x2);
-
-    var SelectRight = Math.max(coords.x1,coords.x2);
-
-    if (SelectLeft == SelectRight)
-        return; // abort if nothing is selected.
-
-    var RRDLeft  = 67;        // difference between left border of RRD image and content
-    var RRDRight = 26;        // difference between right border of RRD image and content
-    var RRDImgWidth  = $('zoom').getDimensions().width;       // Width of the Smokeping RRD Graphik
-    var RRDImgUsable = RRDImgWidth - RRDRight - RRDLeft;  
-    var form = $('range_form');   
-    
-    if (StartEpoch == 0) {
-        StartEpoch = +$F('epoch_start');
-        if (isNaN(StartEpoch))
-            StartEpoch = parseRelativeTime($F('epoch_start'));
-    }
-    if (EndEpoch  == 0) {
-        EndEpoch = +$F('epoch_end');
-        if (isNaN(EndEpoch))
-            EndEpoch = parseRelativeTime($F('epoch_end'));
-    }
-    var DivEpoch = EndEpoch - StartEpoch; 
-
-    var Target = $F('target');
-    var Hierarchy = $F('hierarchy');
-
-    // construct Image URL
-    var myURLObj = new urlObj(document.URL); 
-
-    var myURL = myURLObj.getUrlBase(); 
-
-    // Generate Selected Range in Unix Timestamps
-    var LeftFactor = 1;
-    var RightFactor = 1;
-
-    if (SelectLeft < RRDLeft)
-        LeftFactor = 10;        
-
-    StartEpoch = Math.floor(StartEpoch + (SelectLeft  - RRDLeft) * DivEpoch / RRDImgUsable * LeftFactor );
-
-    if (SelectRight > RRDImgWidth - RRDRight)
-        RightFactor = 10;
-
-    EndEpoch  =  Math.ceil(EndEpoch + (SelectRight - (RRDImgWidth - RRDRight) ) * DivEpoch / RRDImgUsable * RightFactor);
-
-
-    $('zoom').src = myURL + '?displaymode=a&start=' + StartEpoch + '&end=' + EndEpoch + '&target=' + Target + '&hierarchy=' + Hierarchy;    
-
-    myCropper.setParams();
-
-};
-
-if($('range_form') != null && $('range_form').length){
-    $('range_form').on('submit', (function() {
-        $form = $(this);
-
-        // IMPORTANT: avoid using `$form.action` as the base URL.
-        // Browsers expose it as an absolute URL even when the HTML `action`
-        // attribute is relative/empty, which breaks `linkstyle=relative`.
-        // Prefer the literal attribute value; if missing, treat it as empty.
-        var actionAttr = $form.readAttribute('action');
-        var cgiurl = ((actionAttr === null) ? '' : actionAttr).split("?");
-
-        var action = $form.serialize().split("&");
-        action = action.map(i=> i + '&');
-
-        // Preserve the existing ordering logic, but write back a relative action
-        // when the configured linkstyle resolves to relative.
-        $form.writeAttribute('action', cgiurl[0] + "?" + action[4] + action[5] + action[6] + action[3]);
-    }));
-}
-
-// ── Dynamic graph width ────────────────────────────────
 (function () {
+    'use strict';
+
+    // ── Helpers ────────────────────────────────────────────
+
+    function parseRelativeTime(currTime) {
+        var unit = '';
+        var offset = 0;
+        var sign = -1;
+        var table = {
+            s : 1,
+            m : 60,
+            h : 3600,
+            d : 86400,
+            w : 604800,
+            mo : 2592000,
+            y : 31536000,
+        };
+        var regexStr = currTime.match(/[+\-]|[^a-z]+|[a-zA-Z]+/gi);
+        if (regexStr[0] == '+')
+            sign = 1;
+        for (var i = 1; i < regexStr.length; i = i + 2) {
+            unit = regexStr[i + 1].slice(0, 1);
+            if (regexStr[i + 1].slice(0, 2) == 'mo' || (regexStr[i + 1] == 'm' && Math.abs(regexStr[i]) <= 5))
+                unit = 'mo';
+            offset += regexStr[i] * table[unit];
+        }
+        offset = offset * sign;
+        return Math.floor(Date.now() / 1000) + offset;
+    }
+
+    // ── Navigator zoom (replaces Cropper.js) ──────────────
+
+    var StartEpoch = 0;
+    var EndEpoch = 0;
+
+    function changeRRDImage(coords) {
+        window.stop();
+
+        var SelectLeft = Math.min(coords.x1, coords.x2);
+        var SelectRight = Math.max(coords.x1, coords.x2);
+
+        if (SelectLeft == SelectRight)
+            return;
+
+        var zoomImg = document.getElementById('zoom');
+        var RRDLeft = 67;
+        var RRDRight = 26;
+        var RRDImgWidth = zoomImg.offsetWidth;
+        var RRDImgUsable = RRDImgWidth - RRDRight - RRDLeft;
+
+        if (StartEpoch == 0) {
+            var startVal = document.getElementById('epoch_start').value;
+            StartEpoch = +startVal;
+            if (isNaN(StartEpoch))
+                StartEpoch = parseRelativeTime(startVal);
+        }
+        if (EndEpoch == 0) {
+            var endVal = document.getElementById('epoch_end').value;
+            EndEpoch = +endVal;
+            if (isNaN(EndEpoch))
+                EndEpoch = parseRelativeTime(endVal);
+        }
+        var DivEpoch = EndEpoch - StartEpoch;
+
+        var Target = document.getElementById('target').value;
+        var Hierarchy = document.getElementById('hierarchy').value;
+
+        var myURL = location.href.split('?')[0];
+
+        var LeftFactor = 1;
+        var RightFactor = 1;
+
+        if (SelectLeft < RRDLeft)
+            LeftFactor = 10;
+
+        StartEpoch = Math.floor(StartEpoch + (SelectLeft - RRDLeft) * DivEpoch / RRDImgUsable * LeftFactor);
+
+        if (SelectRight > RRDImgWidth - RRDRight)
+            RightFactor = 10;
+
+        EndEpoch = Math.ceil(EndEpoch + (SelectRight - (RRDImgWidth - RRDRight)) * DivEpoch / RRDImgUsable * RightFactor);
+
+        zoomImg.src = myURL + '?displaymode=a&start=' + StartEpoch + '&end=' + EndEpoch + '&target=' + Target + '&hierarchy=' + Hierarchy;
+    }
+
+    function initCropper(zoomImg) {
+        var wrapper = document.createElement('div');
+        wrapper.style.position = 'relative';
+        wrapper.style.display = 'inline-block';
+        wrapper.style.cursor = 'crosshair';
+        zoomImg.parentNode.insertBefore(wrapper, zoomImg);
+        wrapper.appendChild(zoomImg);
+
+        var selection = null;
+        var startX = 0;
+
+        wrapper.addEventListener('mousedown', function (e) {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            var rect = wrapper.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+
+            selection = document.createElement('div');
+            selection.style.position = 'absolute';
+            selection.style.top = '0';
+            selection.style.height = '100%';
+            selection.style.left = startX + 'px';
+            selection.style.width = '0';
+            selection.style.background = 'rgba(79, 156, 249, 0.3)';
+            selection.style.border = '1px solid rgba(79, 156, 249, 0.6)';
+            selection.style.pointerEvents = 'none';
+            wrapper.appendChild(selection);
+
+            function onMove(e) {
+                var currentX = e.clientX - rect.left;
+                var left = Math.min(startX, currentX);
+                var width = Math.abs(currentX - startX);
+                selection.style.left = left + 'px';
+                selection.style.width = width + 'px';
+            }
+
+            function onUp(e) {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                if (selection && selection.parentNode) {
+                    selection.parentNode.removeChild(selection);
+                }
+                var endX = e.clientX - rect.left;
+                var imgHeight = zoomImg.offsetHeight;
+                changeRRDImage({
+                    x1: startX,
+                    y1: 0,
+                    x2: endX,
+                    y2: imgHeight,
+                });
+                selection = null;
+            }
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+    }
+
+    // ── Range form submit ─────────────────────────────────
+
+    var rangeForm = document.getElementById('range_form');
+    if (rangeForm != null && rangeForm.length) {
+        rangeForm.addEventListener('submit', function () {
+            var actionAttr = rangeForm.getAttribute('action');
+            var cgiurl = ((actionAttr === null) ? '' : actionAttr).split("?");
+
+            var action = new URLSearchParams(new FormData(rangeForm)).toString().split("&");
+            action = action.map(function (i) { return i + '&'; });
+
+            rangeForm.setAttribute('action', cgiurl[0] + "?" + action[4] + action[5] + action[6] + action[3]);
+        });
+    }
+
+    // ── Dynamic graph width ───────────────────────────────
+
     var resizeTimer;
-    var PADDING = 18;        // panel-body padding (8px each side) + border slack
+    var PADDING = 18;
     var MIN_WIDTH = 200;
     var MAX_WIDTH = 3000;
 
@@ -149,7 +172,7 @@ if($('range_form') != null && $('range_form').length){
         var panel = document.querySelector('.main .panel-body');
         if (panel) return panel.clientWidth - PADDING;
         var main = document.querySelector('.main');
-        if (main) return main.clientWidth - 40; // 20px padding each side
+        if (main) return main.clientWidth - 40;
         return 0;
     }
 
@@ -174,67 +197,93 @@ if($('range_form') != null && $('range_form').length){
         }
     }
 
-    // First visit without width param: reload once so server generates
-    // graphs at the correct size. On subsequent loads width is already set.
-    var w = clamp(getContentWidth());
-    if (w > 0 && currentUrlWidth() === 0) {
+    function revealGraphs() {
         var imgs = document.querySelectorAll('.panel-body img, .panel-body svg');
         for (var i = 0; i < imgs.length; i++) {
-            imgs[i].style.display = 'none';
+            imgs[i].style.transition = 'opacity 0.3s ease';
+            imgs[i].style.opacity = '1';
         }
-        location.replace(buildWidthUrl(w));
     }
 
-    // On resize: just update the URL, SVGs scale via CSS.
-    // The next auto-refresh will regenerate at the correct width.
-    Event.observe(window, 'resize', function () {
+    var w = clamp(getContentWidth());
+    if (w > 0 && currentUrlWidth() === 0) {
+        location.replace(buildWidthUrl(w));
+    } else {
+        revealGraphs();
+    }
+
+    window.addEventListener('resize', function () {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(recordWidth, 500);
     });
-})();
 
-Event.observe(
-    window,
-    'load',
-    function() {
-       let refresh = setTimeout(function () {
-          location.reload();
-       }, window.options.step * 1000);
+    // ── In-place graph refresh ────────────────────────────
 
-        $('menu-button').observe('click', function (e) {
-            if ($('sidebar').getStyle('left') == '0px') {
-                $('body').addClassName('sidebar-hidden');
-                $('body').removeClassName('sidebar-visible');
+    function refreshGraphs() {
+        var imgs = document.querySelectorAll('.panel-body img, .overview img, .details img');
+        var t = Date.now();
+        for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i];
+            if (img.id === 'zoom') continue;
+            var src = img.getAttribute('src');
+            if (!src) continue;
+            img.style.opacity = '0.3';
+            if (/[?&]_t=\d+/.test(src)) {
+                src = src.replace(/([?&]_t=)\d+/, '$1' + t);
             } else {
-                $('body').removeClassName('sidebar-hidden');
-                $('body').addClassName('sidebar-visible');
+                src += (src.indexOf('?') === -1 ? '?' : '&') + '_t=' + t;
             }
-            Event.stop(e);
+            (function (el) {
+                el.onload = function () { el.style.opacity = '1'; };
+                el.onerror = function () { el.style.opacity = '1'; };
+            })(img);
+            img.setAttribute('src', src);
+        }
+    }
+    // expose for console testing
+    window.refreshGraphs = refreshGraphs;
+
+    function scheduleRefresh() {
+        return setTimeout(function () {
+            refreshGraphs();
+            refresh = scheduleRefresh();
+        }, window.options.step * 1000);
+    }
+
+    // ── Init on load ──────────────────────────────────────
+
+    window.addEventListener('load', function () {
+        var refresh = scheduleRefresh();
+
+        document.getElementById('menu-button').addEventListener('click', function (e) {
+            var body = document.getElementById('body');
+            if (getComputedStyle(document.getElementById('sidebar')).left == '0px') {
+                body.classList.add('sidebar-hidden');
+                body.classList.remove('sidebar-visible');
+            } else {
+                body.classList.remove('sidebar-hidden');
+                body.classList.add('sidebar-visible');
+            }
+            e.preventDefault();
         });
-        $('refresh-button').observe('click', function (e) {
+
+        document.getElementById('refresh-button').addEventListener('click', function (e) {
             if (localStorage.getItem("noRefresh")) {
                 localStorage.removeItem("noRefresh");
-                refresh = setTimeout(function () {
-                   location.reload();
-                }, window.options.step * 1000);
-                $('refresh-button').style.textDecoration = "line-through";
+                refresh = scheduleRefresh();
+                document.getElementById('refresh-button').style.textDecoration = "line-through";
             } else {
                 clearTimeout(refresh);
                 localStorage.setItem("noRefresh", true);
-               $('refresh-button').style.textDecoration = "none";
+                document.getElementById('refresh-button').style.textDecoration = "none";
             }
-            Event.stop(e);
+            e.preventDefault();
         });
-        if ($('zoom') != null) {
-            myCropper = new Cropper.Img(
-                'zoom',
-                {
-                    minHeight: $('zoom').getDimensions().height,
-                    maxHeight: $('zoom').getDimensions().height,
-                    onEndCrop: changeRRDImage
-                }
-            )
-        }
-    }
-);
 
+        var zoomImg = document.getElementById('zoom');
+        if (zoomImg != null) {
+            initCropper(zoomImg);
+        }
+    });
+
+})();

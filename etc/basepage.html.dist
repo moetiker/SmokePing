@@ -7,6 +7,7 @@
     <title>SmokePing Latency Page for <##title##></title>
     <link rel="stylesheet" type="text/css" href="css/smokeping-print.css" media="print">
     <link rel="stylesheet" type="text/css" href="css/smokeping-screen.css" media="screen">
+    <style>.panel-body img, .panel-body svg { opacity: 0; }</style>
     <script>
     	window.options = {
 	    step: <##step##>
@@ -68,9 +69,6 @@
     <p><small>Maintained by <a href="mailto:<##contact##>"><##owner##></a></small></p>
 </div>
 
-<script src="js/prototype.js" type="text/javascript"></script>
-<script src="js/scriptaculous/scriptaculous.js?load=builder,effects,dragdrop" type="text/javascript"></script>
-<script src="js/cropper/cropper.js" type="text/javascript"></script>
 <script src="js/smokeping.js" type="text/javascript"></script>
 
 </body>
