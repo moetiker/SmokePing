@@ -1,3 +1,5 @@
+ - switch container from mod_cgi to mod_fastcgi; mount lib/ in dev mode for live Perl changes @oetiker
+ - fix broken --lazy graph caching: repair maxheight sidecar format, skip findmax/stddev when cached SVGs are fresh, re-enable --lazy for overview graphs @oetiker
  - eliminate page redirect on every click; inject width via link interception and replaceState; width-key SVG cache filenames for correct re-rendering on resize @oetiker
  - replace string eval with block eval and dispatch tables for safer dynamic module loading @oetiker
  - modernize Perl: replace use vars with our, two-arg open with three-arg, bareword filehandles with lexical variables @oetiker

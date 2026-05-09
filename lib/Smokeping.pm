@@ -1049,7 +1049,7 @@ sub get_overview ($$$$){
 
         my ($graphret,$xs,$ys) = RRDs::graph
           ($cfg->{General}{imgcache}.$dir."/${prop}_mini${ov_wsuffix}.svg",
-    #       '--lazy',
+           '--lazy',
            '--start','-'.$ov_range,
            '--title',$cfg->{Presentation}{htmltitle} ne 'yes' ? $phys_tree->{title} : '',
            '--height',$cfg->{Presentation}{overview}{height},
@@ -1249,12 +1249,40 @@ sub get_detail ($$$$;$){
                  }
                  close $hg_fh;
              }
-             $max->{$s} = findmax $cfg, $base_rrd.$s.".rrd";
-             if (open(my $hg_out, '>', "${imgbase}.maxheight$s")){
-                 foreach my $size (keys %{$max->{$s}}){
-                     print $hg_out "$s $max->{$s}{$size}\n";
+             # check if we can reuse cached maxheight values:
+             # if sidecar has data and all SVGs are newer than the RRD,
+             # findmax would return the same result
+             my $rrd_file = $base_rrd.$s.".rrd";
+             my $rrd_mtime = (stat($rrd_file))[9] || 0;
+             my $can_skip_findmax = keys %{$lastheight{$s} || {}};
+             if ($can_skip_findmax) {
+                 for my $task (@tasks) {
+                     my $tstart = exp2seconds($task->[1]);
+                     my $tend = $task->[2] || 'last';
+                     my $svg = "${imgbase}${s}_${tend}_${tstart}.svg";
+                     # also check width-variant SVGs
+                     my $detail_default_w = $cfg->{Presentation}{detail}{width};
+                     my $detail_actual_w = get_param_width($q, $detail_default_w);
+                     my $wsuffix = $detail_actual_w != $detail_default_w ? "_w${detail_actual_w}" : '';
+                     $svg = "${imgbase}${s}_${tend}_${tstart}${wsuffix}.svg" if $wsuffix;
+                     my $svg_mtime = (stat($svg))[9] || 0;
+                     if (!$svg_mtime || $svg_mtime < $rrd_mtime) {
+                         $can_skip_findmax = 0;
+                         last;
+                     }
                  }
-                 close $hg_out;
+             }
+             if ($can_skip_findmax) {
+                 # reuse cached values from sidecar
+                 $max->{$s} = { %{$lastheight{$s}} };
+             } else {
+                 $max->{$s} = findmax $cfg, $rrd_file;
+                 if (open(my $hg_out, '>', "${imgbase}.maxheight$s")){
+                     foreach my $size (keys %{$max->{$s}}){
+                         print $hg_out "$size $max->{$s}{$size}\n";
+                     }
+                     close $hg_out;
+                 }
              }
         }
     }
@@ -1424,7 +1452,8 @@ sub get_detail ($$$$;$){
             my $s = $slave ? "~$slave" : "";
             my $swidth = $max->{$s}{$start} / $cfg->{Presentation}{detail}{height};
             my $rrd = $base_rrd.$s.".rrd";
-            my $stddev = Smokeping::RRDhelpers::get_stddev($rrd,'median','AVERAGE',$realstart,$sigtime) || 0;
+            my $is_lazy = $mode eq 's' && $lastheight{$s} && defined $lastheight{$s}{$start} && defined $max->{$s}{$start} && $lastheight{$s}{$start} == $max->{$s}{$start};
+            my $stddev = $is_lazy ? 0 : (Smokeping::RRDhelpers::get_stddev($rrd,'median','AVERAGE',$realstart,$sigtime) || 0);
             my @median = ("DEF:median=${rrd}:median:AVERAGE",
                           "CDEF:ploss=loss,$pings,/,100,*",
                           "VDEF:avmed=median,AVERAGE",
@@ -1506,7 +1535,7 @@ sub get_detail ($$$$;$){
             $cfg->{Presentation}{detail}{logarithmic} eq 'yes';
 
             my @lazy =();
-            @lazy = ('--lazy') if $mode eq 's' and $lastheight{$s} and $lastheight{$s}{$start} and $lastheight{$s}{$start} == $max->{$s}{$start};
+            @lazy = ('--lazy') if $is_lazy;
             my $timer_start = time();
             # clean up stale width-variant detail SVGs
             for (glob("${imgbase}${s}_${end}_${start}_w*.svg")) {
